@@ -1,0 +1,186 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{thaidate}[2024/10/14 Thai Date package]
+
+\RequirePackage{xltxtra}
+\RequirePackage{polyglossia}
+\RequirePackage{xparse}
+\RequirePackage{ifthen}
+\RequirePackage{calculator}
+\RequirePackage{xstring}
+
+\makeatletter
+% Thai month names
+\newcommand{\thaimonthname}[1]{%
+  \ifcase#1 %
+    \or มกราคม\or กุมภาพันธ์\or มีนาคม\or เมษายน\or พฤษภาคม\or มิถุนายน%
+    \or กรกฎาคม\or สิงหาคม\or กันยายน\or ตุลาคม\or พฤศจิกายน\or ธันวาคม%
+  \fi %
+}
+
+\newcommand{\thaimonthAbvname}[1]{%
+  \ifcase#1 %
+    \or ม.ค.\or ก.พ.\or มี.ค.\or เม.ย.\or พ.ค.\or มิ.ย.%
+    \or ก.ค.\or ส.ค.\or ก.ย.\or ต.ค.\or พ.ย.\or ธ.ค.%
+  \fi %
+}
+
+% Thai day names
+\newcommand{\thaidayname}[1]{%
+  \ifcase#1 %
+    \or อาทิตย์\or จันทร์\or อังคาร\or พุธ%
+    \or พฤหัสบดี\or ศุกร์\or เสาร์%
+  \fi %
+}
+
+\newcommand{\thaidayAbvname}[1]{%
+  \ifcase#1 %
+    \or อา.\or จ.\or อ.\or พ.\or พฤ.\or ศ.\or ส.%
+  \fi %
+}
+
+% Thai Buddhist year conversion (add 543 to Gregorian year)
+\newcommand{\thaibuddhistyear}[1]{\the\numexpr#1+543\relax}
+
+%%---------------------------------------------------
+\NewDocumentCommand{\calcweekday}{s m m m}{%
+  \def\@y{#4}% Year
+  \def\@m{#3}% Month
+  \def\@d{#2}% Day
+  %
+  % % Adjust year and month for January and February (Zeller's rule)
+  \ifnum\@m<3% If month is January or February
+    \SUBTRACT{\@y}{1}{\@y}% Subtract 1 from the year
+    \ADD{\@m}{12}{\@m}% Add 12 to the month
+  \fi% Now, January = 13, February = 14
+  %
+  % Perform Zeller’s Congruence calculation
+  \MODULO{\@y}{100}{\@K}%
+  \DIVIDE{\@K}{4}{\@Kfth}%
+  \FLOOR{\@Kfth}{\@floorKfth}%
+  \DIVIDE{\@y}{100}{\@J}%
+  \FLOOR{\@J}{\@J}%
+  %----
+  \MULTIPLY{\@J}{2}{\@JJ}%
+  \DIVIDE{\@J}{4}{\@Jfth}%
+  \FLOOR{\@Jfth}{\@floorJfth}%
+  %----
+  \ADD{\@m}{1}{\@mone}%
+  \MULTIPLY{\@mone}{13}{\@monethrtn}%
+  \DIVIDE{\@monethrtn}{5}{\@monethrtnfifth}%
+  \FLOOR{\@monethrtnfifth}{\@rdterm}%
+  %---- 
+  \ADD{\@d}{\@rdterm}{\@H}%
+  \ADD{\@H}{\@K}{\@H}%
+  \ADD{\@H}{\@floorKfth}{\@H}%
+  \ADD{\@H}{\@floorJfth}{\@H}%
+  \SUBTRACT{\@H}{\@JJ}{\@H}%
+  %----
+  % Take modulo 7 (Zeller's Congruence result)
+  \MODULO{\@H}{7}{\weekdaynum}%
+  \ifnum\weekdaynum=0% If the result is 0, change it to 7
+    \def\weekdaynum{7}%
+  \fi%
+  \IfBooleanTF{#1}{%
+    \thaidayAbvname\weekdaynum%
+  }{%
+    \thaidayname\weekdaynum%
+  }%
+}%
+%--------------------------------------
+
+\NewDocumentCommand{\processDate}{o m m m}{%
+  \def\@day{#2}% dd-mm-yyyy
+  \def\@month{#3}%
+  \def\@year{#4}%
+  \def\@thmonth{\thaimonthname\@month}%
+  \def\@thyear{\thaibuddhistyear\@year}%
+  \IfNoValueTF{#1}{%
+    \@day~\@thmonth~\@thyear%
+  }{%
+      \def\@thweekday{\calcweekday{\@year}{\@month}{\@day}}%
+      วัน{\@thweekday}ที่~\@day~\@thmonth~พ.ศ.~\@thyear%
+  }%
+  % วัน{\@thweekday}ที่~\@day~\@thmonth~พ.ศ.~\@thyear%
+}
+
+%=======================================================
+\NewDocumentCommand{\thday}{m}{%
+  \StrBefore{#1}{-}[\day]% Extract the year
+  \StrBetween[1,2]{#1}{-}{-}[\month]% Extract the month
+  \StrBehind[2]{#1}{-}[\year]%
+  \calcweekday{\day}{\month}{\year}%
+}
+
+% Extract last two digits of year
+\newcommand{\twodigitsyy}[1]{%
+  \MODULO{#1}{100}{\@lasttwodigits}%
+  \ifnum\@lasttwodigits<10%
+    \def\lasttwodigits{0\@lasttwodigits}%
+  \else%
+    \def\lasttwodigits{\@lasttwodigits}%
+  \fi
+  \lasttwodigits%
+}
+
+% Define \thdate to split the input into year, month, and day
+\NewDocumentCommand{\thaidate}{o m}{%
+  \StrBefore{#2}{-}[\day]% Extract the year
+  \StrBetween[1,2]{#2}{-}{-}[\month]% Extract the month
+  \StrBehind[2]{#2}{-}[\year]% Extract the day
+  %---
+  \def\yy{\twodigitsyy{\year}}%
+  \def\bdhyy{\twodigitsyy{\thaibuddhistyear\year}}%
+  \def\buddhistyear{\thaibuddhistyear\year}%
+  %---
+  \StrBefore{#1}{-}[\dayfm]% Extract the year
+  \StrBetween[1,2]{#1}{-}{-}[\monthfm]% Extract the month
+  \StrBehind[2]{#1}{-}[\yearfm]% Extract the day
+  %---
+  \IfNoValueTF{#1}{%
+    \day\ \thaimonthname\month\ \buddhistyear%
+  }{%
+    % \def\weekday{\calcweekday{\year}{\month}{\day}}
+    \IfStrEqCase{#1}{%
+      {dddd}{วัน\calcweekday{\day}{\month}{\year}}% วันอาทิตย์
+      {ddd}{\calcweekday{\day}{\month}{\year}}% อาทิตย์
+      {dd}{\calcweekday*{\day}{\month}{\year}}% อา.
+      {d}{\day}% 19
+      {mm}{\thaimonthAbvname\month}% ม.ค.
+      {mmm}{\thaimonthname\month}% ม.ค.
+      {yy}{\bdhyy}% 68
+      {yyyy}{\buddhistyear}% 2568
+      {d-mm-yy}{% 19 ม.ค. 68
+        \day\ \thaimonthAbvname\month\ \bdhyy%
+      }%
+      {dd-mm-yy}{% อา. 19 ม.ค. 68
+        \calcweekday*{\day}{\month}{\year}\ \day\ \thaimonthAbvname\month\ \bdhyy%
+      }%
+      {ddd-mmm-yyy}{% อาทิตย์ 19 มกราคม 2568
+        \calcweekday{\day}{\month}{\year}\ \day\ \thaimonthname\month\ \buddhistyear%
+      }%
+      {d-mmm-yyy}{% 19 มกราคม 2568
+      \day\ \thaimonthname\month\ \buddhistyear%
+      }%
+      {d-mmm-yyyy}{% 19 มกราคม พ.ศ. 2568
+        \day\ \thaimonthname\month\ พ.ศ.~\buddhistyear%
+      }%
+      {nd-mmm-yyy}{% วันที่ 19 มกราคม พ.ศ. 2568
+        วันที่\ \day\ \thaimonthname\month\ \buddhistyear%
+      }%
+      {nd-mmm-yyyy}{% วันที่ 19 มกราคม พ.ศ. 2568
+        วันที่\ \day\ \thaimonthname\month\ พ.ศ.~\buddhistyear%
+      }%
+      {dddd-mmm-yyy}{% วันอาทิตย์ที่ 19 มกราคม 2568
+        \mbox{วัน\calcweekday{\day}{\month}{\year}ที่\ \day\ \thaimonthname\month\ \buddhistyear}%
+      }%
+      {dddd-mmm-yyyy}{% วันอาทิตย์ที่ 19 มกราคม พ.ศ. 2568
+        \mbox{วัน\calcweekday{\day}{\month}{\year}ที่\ \day\ \thaimonthname\month\ พ.ศ.~\buddhistyear}%
+      }%
+      {dddd-mmmm-yyyyy}{% วันอาทิตย์ที่ 19 เดือนมกราคม พุทธศักราช 2568
+        \mbox{วัน\calcweekday{\day}{\month}{\year}ที่\ \day\ เดือน\thaimonthname\month\ พุทธศักราช~\buddhistyear}%
+      }%
+      }%
+  }%
+}
+
+\makeatother
